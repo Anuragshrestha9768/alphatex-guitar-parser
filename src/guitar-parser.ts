@@ -1,12 +1,23 @@
 /**
  * AlphaTex Guitar Track Extractor
- * Preserves header metadata and extracts only guitar tracks
+ * Preserves header metadata and extracts a single selected guitar track
  */
+
+interface ParserConfig {
+  verbose?: boolean;
+  customKeywords?: string[];
+}
 
 class AlphaTexGuitarParser {
   private readonly guitarKeywords: string[];
+  private config: ParserConfig;
 
-  constructor() {
+  constructor(config: ParserConfig = {}) {
+    this.config = {
+      verbose: true, // Default value
+      ...config,
+    };
+
     this.guitarKeywords = [
       "guitar",
       "e-gt",
@@ -33,108 +44,194 @@ class AlphaTexGuitarParser {
       "mid tone",
       "pinch",
       "overdrive",
-      "bass",        // Added for Track 3
-      "ukulele",     // Added for completeness
-      "mandolin",    // Added for completeness
-      "banjo"        // Added for completeness
+      "bass",
+      "ukulele",
+      "mandolin",
+      "banjo",
+      ...(config.customKeywords || []),
     ];
   }
 
-  public parse(alphaTexString: string): string {
+  /**
+   * Get list of all guitar tracks with their details
+   */
+  public listGuitarTracks(alphaTexString: string): Array<{
+    number: number;
+    name: string;
+    instrument: string;
+  }> {
+    const tracks = this.parseTracks(alphaTexString);
+    const guitarTracks = tracks.filter((track) =>
+      this.isGuitarTrack(track.lines),
+    );
+
+    return guitarTracks.map((track, idx) => ({
+      number: idx + 1,
+      name: track.name,
+      instrument: track.instrument,
+    }));
+  }
+
+  /**
+   * Extract a specific guitar track
+   * @param alphaTexString - The AlphaTex content
+   * @param selection - Track number (1-based) or name/partial name
+   * @returns Extracted AlphaTex with header and selected track
+   */
+  public extractGuitarTrack(
+    alphaTexString: string,
+    selection: number | string,
+  ): string {
+    const tracks = this.parseTracks(alphaTexString);
+    const guitarTracks = tracks.filter((track) =>
+      this.isGuitarTrack(track.lines),
+    );
+
+    if (guitarTracks.length === 0) {
+      throw new Error("No guitar tracks found in the AlphaTex content");
+    }
+
+    // Find selected track
+    let selectedTrack;
+
+    if (typeof selection === "number") {
+      // Selection by number (1-based)
+      if (selection >= 1 && selection <= guitarTracks.length) {
+        selectedTrack = guitarTracks[selection - 1];
+      }
+    } else {
+      // Selection by name (case-insensitive partial match)
+      const lowerSel = selection.toLowerCase();
+      selectedTrack = guitarTracks.find(
+        (track) =>
+          track.name.toLowerCase().includes(lowerSel) ||
+          track.instrument.toLowerCase().includes(lowerSel),
+      );
+    }
+
+    if (!selectedTrack) {
+      this.showAvailableTracks(guitarTracks);
+      throw new Error(
+        `\n❌ Could not find guitar track matching: ${selection}`,
+      );
+    }
+
+    if (this.config.verbose) {
+      console.log(
+        `\n✅ Extracted: ${selectedTrack.name} (${selectedTrack.instrument})`,
+      );
+    }
+
+    // Extract header (everything before first track)
+    const header = this.extractHeader(alphaTexString);
+
+    // Combine header with selected track
+    return [...header, ...selectedTrack.lines].join("\n");
+  }
+
+  // Private methods
+  private parseTracks(alphaTexString: string): Array<{
+    name: string;
+    instrument: string;
+    lines: string[];
+    startLine: number;
+  }> {
     const lines = alphaTexString.split("\n");
-    const result: string[] = [];
+    const tracks: Array<{
+      name: string;
+      instrument: string;
+      lines: string[];
+      startLine: number;
+    }> = [];
 
-    let inHeader = true;
     let inTrack = false;
-    let currentTrackHasGuitar = false;
     let currentTrack: string[] = [];
-    let trackCount = 0;
-    let guitarCount = 0;
-    let headerContent: string[] = [];
-
-    console.log("🎸 Scanning for guitar tracks...\n");
+    let currentTrackName = "";
+    let currentTrackStartLine = 0;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-
-      // Skip if line is undefined
       if (line === undefined) continue;
 
       const trimmed = line.trim();
 
-      // Skip empty lines in header (optional)
-      // if (inHeader && trimmed === "") continue;
-
-      if (
-        trimmed.startsWith("\\track") ||
-        trimmed.startsWith("[track]") ||
-        trimmed.startsWith("TRACK")
-      ) {
-        inHeader = false;
-
-        if (inTrack) {
-          if (currentTrackHasGuitar) {
-            result.push(...currentTrack);
-            result.push(""); // Add blank line between tracks
-            guitarCount++;
-            console.log(`✅ Track ${trackCount}: GUITAR - KEPT`);
-          } else {
-            console.log(`❌ Track ${trackCount}: Not guitar - SKIPPED`);
-          }
+      if (this.isTrackStart(trimmed)) {
+        if (inTrack && currentTrack.length > 0) {
+          tracks.push({
+            name: currentTrackName,
+            instrument: this.extractInstrumentInfo(currentTrack),
+            lines: [...currentTrack],
+            startLine: currentTrackStartLine,
+          });
         }
 
         inTrack = true;
-        currentTrackHasGuitar = false;
         currentTrack = [line];
-        trackCount++;
-
-        if (this.isGuitarInstrument(line)) {
-          currentTrackHasGuitar = true;
-          console.log(`   Found guitar in track header: "${this.extractTrackName(line)}"`);
-        }
-      } else if (inHeader) {
-        if (trimmed !== "") {
-          headerContent.push(line);
-        }
+        currentTrackStartLine = i;
+        currentTrackName = this.extractTrackName(line);
       } else if (inTrack) {
-        if (
-          trimmed.includes("instrument") &&
-          this.isGuitarInstrument(trimmed)
-        ) {
-          currentTrackHasGuitar = true;
-          console.log(`   Found guitar instrument: "${trimmed}"`);
-        }
         currentTrack.push(line);
+
+        if (trimmed === "}") {
+          tracks.push({
+            name: currentTrackName,
+            instrument: this.extractInstrumentInfo(currentTrack),
+            lines: [...currentTrack],
+            startLine: currentTrackStartLine,
+          });
+          inTrack = false;
+          currentTrack = [];
+        }
       }
     }
 
-    // Process the last track
-    if (inTrack) {
-      if (currentTrackHasGuitar) {
-        result.push(...currentTrack);
-        guitarCount++;
-        console.log(`✅ Track ${trackCount}: GUITAR - KEPT`);
-      } else {
-        console.log(`❌ Track ${trackCount}: Not guitar - SKIPPED`);
+    return tracks;
+  }
+
+  private extractHeader(alphaTexString: string): string[] {
+    const lines = alphaTexString.split("\n");
+    const header: string[] = [];
+
+    for (const line of lines) {
+      if (line === undefined) continue;
+      if (this.isTrackStart(line.trim())) {
+        break;
       }
+      header.push(line);
     }
 
-    const finalResult = [...headerContent, ...result];
+    return header;
+  }
 
-    console.log("\n" + "=".repeat(50));
-    console.log(`📊 Summary:`);
-    console.log(`   Header lines preserved: ${headerContent.length}`);
-    console.log(`   Total tracks: ${trackCount}`);
-    console.log(`   Guitar tracks: ${guitarCount}`);
-    console.log(`   Other tracks: ${trackCount - guitarCount}`);
+  private isTrackStart(line: string): boolean {
+    const lowerLine = line.toLowerCase();
+    return (
+      lowerLine.startsWith("\\track") ||
+      lowerLine.startsWith("[track]") ||
+      lowerLine.startsWith("track")
+    );
+  }
 
-    return finalResult.join("\n");
+  private isGuitarTrack(trackLines: string[]): boolean {
+    return trackLines.some((line) => this.isGuitarInstrument(line));
   }
 
   private isGuitarInstrument(text: string): boolean {
     const lowerText = text.toLowerCase();
-    return this.guitarKeywords.some((keyword) =>
-      lowerText.includes(keyword.toLowerCase()),
+
+    // Check for explicit guitar
+    if (lowerText.includes("guitar") && !lowerText.includes("piano")) {
+      return true;
+    }
+
+    // Check keywords
+    return this.guitarKeywords.some(
+      (keyword) =>
+        lowerText.includes(keyword) &&
+        !lowerText.includes("piano") &&
+        !lowerText.includes("drum") &&
+        !lowerText.includes("flute") &&
+        !lowerText.includes("violin"),
     );
   }
 
@@ -143,304 +240,108 @@ class AlphaTexGuitarParser {
     if (match) {
       return `${match[1]} (${match[2]})`;
     }
-    return line.substring(0, 30) + "...";
+
+    const simpleMatch = line.match(/track\s+"([^"]+)"/i);
+    if (simpleMatch) {
+      return simpleMatch[1];
+    }
+
+    return "Unknown Track";
+  }
+
+  private extractInstrumentInfo(trackLines: string[]): string {
+    for (const line of trackLines) {
+      if (line.toLowerCase().includes("instrument")) {
+        const match = line.match(/instrument\s+([^\s{]+)/i);
+        if (match) {
+          return match[1];
+        }
+      }
+    }
+    return "Unknown";
+  }
+
+  private showAvailableTracks(
+    tracks: Array<{
+      number?: number;
+      name: string;
+      instrument: string;
+    }>,
+  ): void {
+    console.log("\n🎸 Available guitar tracks:");
+    tracks.forEach((track, idx) => {
+      console.log(`   ${idx + 1}. ${track.name} (${track.instrument})`);
+    });
+    console.log("\nUsage:");
+    console.log("   extractGuitarTrack(content, 1)        // Select by number");
+    console.log("   extractGuitarTrack(content, 'Lead')   // Select by name");
   }
 }
 
-// Your multi-guitar content
-const aTexContent = `\\artist "Guitar Ensemble"
-\\copyright "Copyright 2024"
-\\title "Three Guitars Concerto"
-\\subtitle "Demo for Guitar Track Extractor"
-\\systemsLayout (4 4 4 4 4 4)
+// Simple usage example
+function main(): void {
+  console.log("\n🎸 AlphaTex Guitar Track Extractor\n");
 
-% ========================================
-% Track 1: Lead Electric Guitar - SHOULD BE KEPT
-% ========================================
+  const alphaTexContent = `\\artist "Guitar Ensemble"
+\\copyright "Copyright 2024"
+\\title "Guitar Concerto"
+
+% Track 1: Lead Guitar
 \\track ("Lead Guitar" "E-Gt") {
-  color "#FF3333"
-  systemsLayout (8 5 2 2 3 3 3 3)
-  volume 12
-  balance 8
   instrument distortionguitar
 }
   \\staff {
     score
-    tabs
   }
-    \\tuning (E4 B3 G3 D3 A2 E2)
-    \\ts (4 4)
-    \\tempo 120
-    \\ks c
-      12.2{v}.2{f}
-      14.2{v acc #}.4
-      15.2.8
-      17.2.8
-    |
-      14.1{v acc #}.2
-      17.2.8
-      15.1.8
-    |
+    12.2.2
+  |
 
-% ========================================
-% Track 2: Rhythm Acoustic Guitar - SHOULD BE KEPT
-% ========================================
-\\track ("Acoustic Rhythm" "A-Gt") {
-  color "#33FF33"
-  systemsLayout (8 5 2 2 3 3 3 3)
-  volume 10
-  balance 8
+% Track 2: Acoustic Guitar
+\\track ("Acoustic Guitar" "A-Gt") {
   instrument acoustic guitar
 }
   \\staff {
     score
-    tabs
   }
-    \\tuning (E4 B3 G3 D3 A2 E2)
-    \\ts (4 4)
-    \\tempo 120
-    \\ks c
-      (3.2 2.2 0.2).4
-      3.2.8
-      0.2.8
-      (5.3 3.3 2.3).4
-    |
-      5.3.8
-      3.3.8
-      (7.3 5.3 3.3).4
-    |
+    (3.2 2.2 0.2).4
+  |
 
-% ========================================
-% Track 3: Bass Guitar - SHOULD BE KEPT (if 'bass' in keywords)
-% ========================================
-\\track ("Bass Guitar" "B-Gt") {
-  color "#3333FF"
-  systemsLayout (8 5 2 2 3 3 3 3)
-  volume 14
-  balance 8
-  instrument bass
-}
-  \\staff {
-    score
-    tabs
-  }
-    \\tuning (E2 A2 D3 G3)
-    \\ts (4 4)
-    \\tempo 120
-    \\ks c
-      0.2.4
-      2.2.4
-      3.2.4
-      5.2.4
-    |
-      7.2.4
-      8.2.4
-      9.2.4
-      10.2.4
-    |
-
-% ========================================
-% Track 4: Piano - SHOULD BE SKIPPED
-% ========================================
-\\track ("Grand Piano" "Pno") {
-  color "#FF33FF"
-  volume 10
-  balance 8
+% Track 3: Piano
+\\track ("Piano" "Pno") {
   instrument acoustic grand piano
 }
   \\staff {
     score
   }
-    \\clef treble
-    \\ts (4 4)
-    \\tempo 120
-    \\ks c
-      c4 e g c'
-      e g c' e'
-      g c' e' g'
-    |
-
-% ========================================
-% Track 5: Clean Electric Guitar - SHOULD BE KEPT
-% ========================================
-\\track ("Clean Guitar" "C-Gt") {
-  color "#33FFFF"
-  systemsLayout (8 5 2 2 3 3 3 3)
-  volume 9
-  balance 8
-  instrument clean electric guitar
-}
-  \\staff {
-    score
-    tabs
-  }
-    \\tuning (E4 B3 G3 D3 A2 E2)
-    \\ts (4 4)
-    \\tempo 90
-    \\ks c
-      7.2.4
-      8.2.4
-      9.2.4
-      10.2.4
-    |
-      7.3.4
-      8.3.4
-      9.3.4
-      10.3.4
-    |
-
-% ========================================
-% Track 6: Strings - SHOULD BE SKIPPED
-% ========================================
-\\track ("Violin Section" "Vln") {
-  color "#FFFF33"
-  volume 11
-  balance 8
-  instrument violin
-}
-  \\staff {
-    score
-  }
-    \\clef treble
-    \\ts (4 4)
-    \\tempo 120
-    \\ks c
-      g4 a b c''
-      d'' e'' f'' g''
-      a'' b'' c''' d'''
-    |
-
-% ========================================
-% Track 7: Jazz Guitar - SHOULD BE KEPT
-% ========================================
-\\track ("Jazz Guitar" "J-Gt") {
-  color "#FF9933"
-  systemsLayout (8 5 2 2 3 3 3 3)
-  volume 8
-  balance 8
-  instrument jazz guitar
-}
-  \\staff {
-    score
-    tabs
-  }
-    \\tuning (E4 B3 G3 D3 A2 E2)
-    \\ts (4 4)
-    \\tempo 140
-    \\ks c
-      (7.3 7.4 5.5).4
-      5.5{pm}.8
-      5.5{pm}.8
-      8.2.8
-    |
-      7.2{acc #}.8
-      5.2.8
-      7.3.8
-      9.3.8
-    |
-
-% ========================================
-% Track 8: Drums - SHOULD BE SKIPPED
-% ========================================
-\\track ("Drum Kit" "Drums") {
-  color "#9933FF"
-  volume 15
-  balance 8
-  instrument percussion
-}
-  \\staff {
-    score
-  }
-    \\clef percussion
-    \\ts (4 4)
-    \\tempo 120
-    \\ks c
-      "Kick".4 "Snare".4 "Hi-Hat".4 "Kick".4
-      "Snare".4 "Hi-Hat".4 "Kick".4 "Snare".4
-      "Crash".4 "Ride".4 "Tom".4 "Snare".4
-    |
-
-% ========================================
-% Track 9: Classical Nylon Guitar - SHOULD BE KEPT
-% ========================================
-\\track ("Nylon Guitar" "N-Gt") {
-  color "#33FF99"
-  systemsLayout (8 5 2 2 3 3 3 3)
-  volume 7
-  balance 8
-  instrument nylon-string guitar
-}
-  \\staff {
-    score
-    tabs
-  }
-    \\tuning (E4 B3 G3 D3 A2 E2)
-    \\ts (3 4)
-    \\tempo 80
-    \\ks c
-      0.2.4
-      2.2.4
-      3.2.4
-      5.2.4
-    |
-      7.2.4
-      8.2.4
-      9.2.4
-      10.2.4
-    |
-      12.2.4
-      14.2.4
-      15.2.4
-      17.2.4
-    |
-
-% ========================================
-% Track 10: Flute - SHOULD BE SKIPPED
-% ========================================
-\\track ("Flute" "Fl") {
-  color "#FF99FF"
-  volume 6
-  balance 8
-  instrument flute
-}
-  \\staff {
-    score
-  }
-    \\clef treble
-    \\ts (4 4)
-    \\tempo 100
-    \\ks c
-      c'''4 d''' e''' f'''
-      g''' a''' b''' c''''
-      d'''' e'''' f'''' g''''
-    |
+    c4 e g c'
+  |
 `;
 
-function main(): void {
-  console.log("\n" + "🎸".repeat(10));
-  console.log("   AlphaTex Guitar Track Extractor");
-  console.log("🎸".repeat(10) + "\n");
+  const parser = new AlphaTexGuitarParser({ verbose: true });
 
-  const parser = new AlphaTexGuitarParser();
-  const result = parser.parse(aTexContent);
+  try {
+    // List available tracks
+    console.log("Available tracks:");
+    const tracks = parser.listGuitarTracks(alphaTexContent);
+    tracks.forEach((track) => {
+      console.log(`  ${track.number}. ${track.name} (${track.instrument})`);
+    });
 
-  console.log("\n" + "=".repeat(50));
-  console.log("📄 FINAL OUTPUT (Header + Guitar Tracks):");
-  console.log("=".repeat(50));
+    // Extract by number
+    console.log("\n--- Extracting track #1 ---");
+    const result1 = parser.extractGuitarTrack(alphaTexContent, 2);
+    console.log(result1);
 
-  const lines = result.split("\n");
-  
-  // Show first 30 lines as preview
-  const previewLines = lines.slice(0, 1000);
-  console.log(previewLines.join("\n"));
-
-  // if (lines.length > 30) {
-  //   console.log(`\n... and ${lines.length - 30} more lines`);
-  // }
-
-  console.log(`\n✅ Successfully extracted!`);
-  console.log(`   Total output lines: ${lines.length}`);
-  console.log(`   Total output size: ${result.length} characters`);
+    // Extract by name
+    console.log("\n--- Extracting track by name 'Acoustic' ---");
+    const result2 = parser.extractGuitarTrack(alphaTexContent, "Acoustic");
+    console.log(result2);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
+    }
+  }
 }
 
+// Run
 main();

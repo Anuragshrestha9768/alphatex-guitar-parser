@@ -1,0 +1,22 @@
+{
+  "name": "parser",
+  "version": "1.0.0",
+  "description": "AlphaTex Guitar Track Extractor",
+  "main": "dist/guitar-parser.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/guitar-parser.js",
+    "dev": "ts-node src/guitar-parser.ts",
+    "watch": "tsc --watch",
+    "clean": "powershell -Command \"Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue\"",
+    "prebuild": "npm run clean"
+  },
+  "keywords": ["alphatex", "guitar", "parser"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

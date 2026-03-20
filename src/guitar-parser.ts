@@ -1,7 +1,6 @@
 /**
  * AlphaTex Guitar Track Extractor
  * Preserves header metadata and extracts only guitar tracks
- * Fixed TypeScript errors
  */
 
 class AlphaTexGuitarParser {
@@ -34,6 +33,10 @@ class AlphaTexGuitarParser {
       "mid tone",
       "pinch",
       "overdrive",
+      "bass",        // Added for Track 3
+      "ukulele",     // Added for completeness
+      "mandolin",    // Added for completeness
+      "banjo"        // Added for completeness
     ];
   }
 
@@ -59,6 +62,9 @@ class AlphaTexGuitarParser {
 
       const trimmed = line.trim();
 
+      // Skip empty lines in header (optional)
+      // if (inHeader && trimmed === "") continue;
+
       if (
         trimmed.startsWith("\\track") ||
         trimmed.startsWith("[track]") ||
@@ -69,7 +75,7 @@ class AlphaTexGuitarParser {
         if (inTrack) {
           if (currentTrackHasGuitar) {
             result.push(...currentTrack);
-            result.push("");
+            result.push(""); // Add blank line between tracks
             guitarCount++;
             console.log(`✅ Track ${trackCount}: GUITAR - KEPT`);
           } else {
@@ -84,7 +90,7 @@ class AlphaTexGuitarParser {
 
         if (this.isGuitarInstrument(line)) {
           currentTrackHasGuitar = true;
-          console.log(`   Found guitar in track header`);
+          console.log(`   Found guitar in track header: "${this.extractTrackName(line)}"`);
         }
       } else if (inHeader) {
         if (trimmed !== "") {
@@ -102,6 +108,7 @@ class AlphaTexGuitarParser {
       }
     }
 
+    // Process the last track
     if (inTrack) {
       if (currentTrackHasGuitar) {
         result.push(...currentTrack);
@@ -130,21 +137,29 @@ class AlphaTexGuitarParser {
       lowerText.includes(keyword.toLowerCase()),
     );
   }
+
+  private extractTrackName(line: string): string {
+    const match = line.match(/\("([^"]+)"\s+"([^"]+)"\)/);
+    if (match) {
+      return `${match[1]} (${match[2]})`;
+    }
+    return line.substring(0, 30) + "...";
+  }
 }
 
-// Your a.tex content
-const aTexContent = `\\artist "JerryC"
-\\copyright ("Junior Antoneli" "Copyright %COPYRIGHT%" center)
-\\subtitle "J & M Instituto Musical "
-\\title "Canon Rock "
-\\tab "junior Antoneli "
-\\systemsLayout (3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 2)
-\\bracketExtendMode groupsimilarinstruments
-\\otherSystemsTrackNameOrientation horizontal
+// Your multi-guitar content
+const aTexContent = `\\artist "Guitar Ensemble"
+\\copyright "Copyright 2024"
+\\title "Three Guitars Concerto"
+\\subtitle "Demo for Guitar Track Extractor"
+\\systemsLayout (4 4 4 4 4 4)
 
-\\track ("Jerry" "E-Gt") {
-  color "#CE4330"
-  systemsLayout (8 5 2 2 3 3 3 3 4 5 5 5 5 5 3 3 2 3 3 3 3 3 3 3 2 4 3 1 3 4 2 3 3 2 4 2 3 3 3 3 3 3 4 5 3 2 2 2 1 1 2 2 2 3 3 3 3 2 2 3 2 1 2 4 1 2 5 4 5 1)
+% ========================================
+% Track 1: Lead Electric Guitar - SHOULD BE KEPT
+% ========================================
+\\track ("Lead Guitar" "E-Gt") {
+  color "#FF3333"
+  systemsLayout (8 5 2 2 3 3 3 3)
   volume 12
   balance 8
   instrument distortionguitar
@@ -153,101 +168,258 @@ const aTexContent = `\\artist "JerryC"
     score
     tabs
   }
-    \\tuning (E4 B3 G3 D3 A2 E2) {
-      label "Guitar Standard Tuning"
-    }
+    \\tuning (E4 B3 G3 D3 A2 E2)
     \\ts (4 4)
-    \\beaming (8 2 2 2 2)
-    \\tempo 90
-    \\accidentals auto
-    \\clef g2
-    \\ottava regular
-    \\simile none
+    \\tempo 120
     \\ks c
-      12.2{v}.2{f dy f instrument distortionguitar beam Down}
-      14.2{v acc #}.4{f beam Down}
-      15.2.8{beam Down}
-      17.2.8{beam Down}
+      12.2{v}.2{f}
+      14.2{v acc #}.4
+      15.2.8
+      17.2.8
     |
-      14.1{v acc #}.2{beam Down}
-      17.2.8{beam Down}
-      15.1.8{beam Down}
-      14.1{h acc #}.16{tu (3 2) beam Down}
-      15.1{h}.16{tu (3 2) beam Down}
-      14.1{acc #}.16{tu (3 2) beam Down}
-      17.2.8{beam Down}
+      14.1{v acc #}.2
+      17.2.8
+      15.1.8
     |
 
-\\track ("Cello" "S-Gt7") {
-  color "#F64A26"
-  systemsLayout (3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 2)
-  volume 9
+% ========================================
+% Track 2: Rhythm Acoustic Guitar - SHOULD BE KEPT
+% ========================================
+\\track ("Acoustic Rhythm" "A-Gt") {
+  color "#33FF33"
+  systemsLayout (8 5 2 2 3 3 3 3)
+  volume 10
   balance 8
-  instrument cello
+  instrument acoustic guitar
 }
   \\staff {
     score
     tabs
   }
-    \\tuning (E4 B3 G3 D3 A2 E2 B1) {
-      label "Guitar 7 strings"
-    }
-    \\displaytranspose 12
-    \\clef g2
-    \\ottava regular
-    \\simile none
+    \\tuning (E4 B3 G3 D3 A2 E2)
+    \\ts (4 4)
+    \\tempo 120
     \\ks c
-      3.6{v}.2{dy f instrument cello}
-      0.5{v}.2
+      (3.2 2.2 0.2).4
+      3.2.8
+      0.2.8
+      (5.3 3.3 2.3).4
+    |
+      5.3.8
+      3.3.8
+      (7.3 5.3 3.3).4
     |
 
-\\track ("Violin" "S-Gt") {
-  color "#F64A26"
-  systemsLayout (3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 2)
+% ========================================
+% Track 3: Bass Guitar - SHOULD BE KEPT (if 'bass' in keywords)
+% ========================================
+\\track ("Bass Guitar" "B-Gt") {
+  color "#3333FF"
+  systemsLayout (8 5 2 2 3 3 3 3)
+  volume 14
+  balance 8
+  instrument bass
+}
+  \\staff {
+    score
+    tabs
+  }
+    \\tuning (E2 A2 D3 G3)
+    \\ts (4 4)
+    \\tempo 120
+    \\ks c
+      0.2.4
+      2.2.4
+      3.2.4
+      5.2.4
+    |
+      7.2.4
+      8.2.4
+      9.2.4
+      10.2.4
+    |
+
+% ========================================
+% Track 4: Piano - SHOULD BE SKIPPED
+% ========================================
+\\track ("Grand Piano" "Pno") {
+  color "#FF33FF"
   volume 10
+  balance 8
+  instrument acoustic grand piano
+}
+  \\staff {
+    score
+  }
+    \\clef treble
+    \\ts (4 4)
+    \\tempo 120
+    \\ks c
+      c4 e g c'
+      e g c' e'
+      g c' e' g'
+    |
+
+% ========================================
+% Track 5: Clean Electric Guitar - SHOULD BE KEPT
+% ========================================
+\\track ("Clean Guitar" "C-Gt") {
+  color "#33FFFF"
+  systemsLayout (8 5 2 2 3 3 3 3)
+  volume 9
+  balance 8
+  instrument clean electric guitar
+}
+  \\staff {
+    score
+    tabs
+  }
+    \\tuning (E4 B3 G3 D3 A2 E2)
+    \\ts (4 4)
+    \\tempo 90
+    \\ks c
+      7.2.4
+      8.2.4
+      9.2.4
+      10.2.4
+    |
+      7.3.4
+      8.3.4
+      9.3.4
+      10.3.4
+    |
+
+% ========================================
+% Track 6: Strings - SHOULD BE SKIPPED
+% ========================================
+\\track ("Violin Section" "Vln") {
+  color "#FFFF33"
+  volume 11
   balance 8
   instrument violin
 }
   \\staff {
     score
-    tabs
   }
-    \\tuning (E4 B3 G3 D3 A2 E2) {
-      label "Guitar Standard Tuning"
-    }
-    \\displaytranspose 12
-    \\clef g2
-    \\ottava regular
-    \\simile none
+    \\clef treble
+    \\ts (4 4)
+    \\tempo 120
     \\ks c
-      (7.1 8.2 7.3 5.5 3.6).2{dy f instrument violin}
-      (9.1{acc #} 10.2 9.3 0.5 12.6).2
+      g4 a b c''
+      d'' e'' f'' g''
+      a'' b'' c''' d'''
     |
 
-\\track ("Drumkit" "Drums") {
-  color "#73B1DE"
-  systemsLayout (3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 3 2)
-  volume 12
+% ========================================
+% Track 7: Jazz Guitar - SHOULD BE KEPT
+% ========================================
+\\track ("Jazz Guitar" "J-Gt") {
+  color "#FF9933"
+  systemsLayout (8 5 2 2 3 3 3 3)
+  volume 8
+  balance 8
+  instrument jazz guitar
+}
+  \\staff {
+    score
+    tabs
+  }
+    \\tuning (E4 B3 G3 D3 A2 E2)
+    \\ts (4 4)
+    \\tempo 140
+    \\ks c
+      (7.3 7.4 5.5).4
+      5.5{pm}.8
+      5.5{pm}.8
+      8.2.8
+    |
+      7.2{acc #}.8
+      5.2.8
+      7.3.8
+      9.3.8
+    |
+
+% ========================================
+% Track 8: Drums - SHOULD BE SKIPPED
+% ========================================
+\\track ("Drum Kit" "Drums") {
+  color "#9933FF"
+  volume 15
   balance 8
   instrument percussion
 }
   \\staff {
     score
   }
-    \\articulation defaults
-    \\clef neutral
-    \\ottava regular
-    \\simile none
+    \\clef percussion
+    \\ts (4 4)
+    \\tempo 120
     \\ks c
-      r.4{dy mf}
-      r.2{d}
+      "Kick".4 "Snare".4 "Hi-Hat".4 "Kick".4
+      "Snare".4 "Hi-Hat".4 "Kick".4 "Snare".4
+      "Crash".4 "Ride".4 "Tom".4 "Snare".4
+    |
+
+% ========================================
+% Track 9: Classical Nylon Guitar - SHOULD BE KEPT
+% ========================================
+\\track ("Nylon Guitar" "N-Gt") {
+  color "#33FF99"
+  systemsLayout (8 5 2 2 3 3 3 3)
+  volume 7
+  balance 8
+  instrument nylon-string guitar
+}
+  \\staff {
+    score
+    tabs
+  }
+    \\tuning (E4 B3 G3 D3 A2 E2)
+    \\ts (3 4)
+    \\tempo 80
+    \\ks c
+      0.2.4
+      2.2.4
+      3.2.4
+      5.2.4
+    |
+      7.2.4
+      8.2.4
+      9.2.4
+      10.2.4
+    |
+      12.2.4
+      14.2.4
+      15.2.4
+      17.2.4
+    |
+
+% ========================================
+% Track 10: Flute - SHOULD BE SKIPPED
+% ========================================
+\\track ("Flute" "Fl") {
+  color "#FF99FF"
+  volume 6
+  balance 8
+  instrument flute
+}
+  \\staff {
+    score
+  }
+    \\clef treble
+    \\ts (4 4)
+    \\tempo 100
+    \\ks c
+      c'''4 d''' e''' f'''
+      g''' a''' b''' c''''
+      d'''' e'''' f'''' g''''
     |
 `;
 
 function main(): void {
-//   console.log("\n" + "🎸".repeat(10));
+  console.log("\n" + "🎸".repeat(10));
   console.log("   AlphaTex Guitar Track Extractor");
-//   console.log("🎸".repeat(10) + "\n");
+  console.log("🎸".repeat(10) + "\n");
 
   const parser = new AlphaTexGuitarParser();
   const result = parser.parse(aTexContent);
@@ -257,15 +429,18 @@ function main(): void {
   console.log("=".repeat(50));
 
   const lines = result.split("\n");
-  const previewLines = lines.slice(0, 25);
+  
+  // Show first 30 lines as preview
+  const previewLines = lines.slice(0, 1000);
   console.log(previewLines.join("\n"));
 
-  if (lines.length > 25) {
-    console.log(`\n... and ${lines.length - 25} more lines`);
-  }
+  // if (lines.length > 30) {
+  //   console.log(`\n... and ${lines.length - 30} more lines`);
+  // }
 
   console.log(`\n✅ Successfully extracted!`);
   console.log(`   Total output lines: ${lines.length}`);
+  console.log(`   Total output size: ${result.length} characters`);
 }
 
 main();
